@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ramzan Food Distribution</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+
+body{
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background:#eef2f7;
+    margin:0;
+}
+
+/* HEADER */
+header{
+    background:linear-gradient(135deg,#0b7a2f,#18a558);
+    color:white;
+    padding:18px;
+    font-size:22px;
+    font-weight:600;
+    text-align:center;
+    position:sticky;
+    top:0;
+}
+
+header span{
+    float:right;
+    font-size:14px;
+    background:white;
+    color:#0b7a2f;
+    padding:6px 10px;
+    border-radius:8px;
+}
+
+/* BUTTONS */
+button{
+    width:90%;
+    padding:18px;
+    margin:8px;
+    font-size:18px;
+    border:none;
+    border-radius:14px;
+    color:white;
+    font-weight:bold;
+}
+
+/* Different actions */
+button[onclick="startRegister()"]{
+    background:#1976d2;
+}
+button[onclick="startVerify()"]{
+    background:#ff9800;
+}
+#markBtn{
+    background:#2e7d32;
+    display:none;
+}
+
+/* SCANNER BOX */
+#reader{
+    width:95%;
+    max-width:400px;
+    margin:20px auto;
+    border-radius:16px;
+    overflow:hidden;
+    box-shadow:0 6px 18px rgba(0,0,0,0.15);
+}
+
+/* RESULT STATUS BOX */
+#result{
+    margin:20px;
+    padding:18px;
+    border-radius:14px;
+    font-size:20px;
+    font-weight:bold;
+    background:white;
+    box-shadow:0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* ADMIN PANEL */
+#adminPanel{
+    background:white;
+    margin:20px;
+    padding:18px;
+    border-radius:18px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.15);
+}
+
+input[type="password"]{
+    padding:12px;
+    width:80%;
+    margin:10px;
+    border-radius:10px;
+    border:1px solid #ccc;
+}
+
+/* TABLE */
+table{
+    border-collapse:collapse;
+    width:100%;
+    margin-top:15px;
+}
+
+th{
+    background:#0b7a2f;
+    color:white;
+}
+
+th,td{
+    padding:12px;
+    text-align:center;
+    border-bottom:1px solid #ddd;
+}
+
+tr:nth-child(even){
+    background:#f5f5f5;
+}
+
+</style>
+
+
+</head>
+
+<body>
+
+<header>
+<div style="padding:15px">
+</div>
+Ramzan Food Distribution
+<span onclick="openAdmin()">⚙ Admin</span>
+</header>
+
+<br>
+
+<button onclick="startRegister()">Register Family</button> <button onclick="startVerify()">Verify & Give Food</button>
+
+<div id="reader"></div>
+<div id="result"></div>
+<button id="markBtn" onclick="markCollected()">MARK AS COLLECTED</button>
+
+<!-- ADMIN PANEL -->
+
+<div id="adminPanel" style="display:none;padding:15px">
+<h2>Admin Dashboard</h2>
+<input type="password" id="adminPass" placeholder="Enter Admin Password">
+<button onclick="loginAdmin()">Login</button>
+
+<div id="adminTable" style="display:none">
+<h3>Registered Families</h3>
+<table border="1" width="100%" style="background:white">
+<thead>
+<tr>
+<th>S.No</th>
+<th>QR ID</th>
+<th>Registered Date</th>
+<th>Collected Date</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
+</div>
+</div>
+
+<script>
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCVtS1L25XxkLhZYTIuXCBydzqlLQA3riI",
+  authDomain: "ramzan-ration-bb3a5.firebaseapp.com",
+  projectId: "ramzan-ration-bb3a5",
+  storageBucket: "ramzan-ration-bb3a5.firebasestorage.app",
+  messagingSenderId: "605765761584",
+  appId: "1:605765761584:web:42a9aed8689cf2a5540bf5"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore();
+
+let currentQR="";
+let mode="";
+let scanner=null;
+let processing=false;
+
+/* ----------- DATE FORMAT ----------- */
+
+function getISTDateTime(){
+    return new Date().toLocaleString('en-IN',{
+        day:'2-digit',
+        month:'2-digit',
+        year:'numeric',
+        hour:'2-digit',
+        minute:'2-digit',
+        hour12:true
+    });
+}
+
+/* convert old ISO date */
+function formatDate(value){
+    if(!value) return "";
+    if(value.includes("T")){
+        let d=new Date(value);
+        return d.toLocaleString('en-IN',{
+            day:'2-digit',
+            month:'2-digit',
+            year:'numeric',
+            hour:'2-digit',
+            minute:'2-digit',
+            hour12:true
+        });
+    }
+    return value;
+}
+
+/* ----------- SAFE QR ID ----------- */
+
+function makeSafeId(text){
+    return btoa(unescape(encodeURIComponent(text)))
+           .replace(/\+/g,'-')
+           .replace(/\//g,'_')
+           .replace(/=+$/,'');
+}
+
+/* ----------- SCANNER ----------- */
+
+async function onScanSuccess(decodedText){
+
+    if(processing) return;
+    processing=true;
+
+    currentQR = decodedText.trim();
+    document.getElementById("result").innerHTML="Processing...";
+
+    try{
+        if(scanner){
+            await scanner.clear();
+            scanner=null;
+        }
+    }catch(e){}
+
+    setTimeout(()=>{
+        processQR();
+    },300);
+}
+
+function startRegister(){
+    processing=false;
+    currentQR="";
+    mode="register";
+    document.getElementById("result").innerHTML="Scan Family Card";
+    scanner=new Html5QrcodeScanner("reader",{fps:10,qrbox:250});
+    scanner.render(onScanSuccess);
+}
+
+function startVerify(){
+    processing=false;
+    currentQR="";
+    mode="verify";
+    document.getElementById("result").innerHTML="Scan Card to Verify";
+    scanner=new Html5QrcodeScanner("reader",{fps:10,qrbox:250});
+    scanner.render(onScanSuccess);
+}
+
+/* ----------- DATABASE LOGIC ----------- */
+
+async function processQR(){
+
+const safeId = makeSafeId(currentQR);
+const ref=db.collection("families").doc(safeId);
+const snap=await ref.get();
+
+if(mode==="register"){
+    if(snap.exists){
+        document.getElementById("result").innerHTML="Already Registered";
+    }else{
+        await ref.set({
+            registered_date:getISTDateTime(),
+            status:"NOT_COLLECTED",
+            collected_date:null
+        });
+        document.getElementById("result").innerHTML="Registered Successfully<br>"+getISTDateTime();
+    }
+}
+
+if(mode==="verify"){
+    if(!snap.exists){
+        document.getElementById("result").innerHTML="Not Registered";
+        return;
+    }
+
+    const data=snap.data();
+
+    if(data.status==="COLLECTED"){
+        document.getElementById("result").innerHTML=
+        "Registered: "+formatDate(data.registered_date)+
+        "<br><br>Already Collected on "+formatDate(data.collected_date);
+    }else{
+        document.getElementById("result").innerHTML=
+        "Registered: "+formatDate(data.registered_date)+
+        "<br><br>ELIGIBLE";
+        document.getElementById("markBtn").style.display="block";
+    }
+}
+
+processing=false;
+}
+
+/* ----------- MARK COLLECTED ----------- */
+
+async function markCollected(){
+const safeId = makeSafeId(currentQR);
+const ref=db.collection("families").doc(safeId);
+await ref.update({
+    status:"COLLECTED",
+    collected_date:getISTDateTime()
+});
+document.getElementById("result").innerHTML="Marked as Collected<br>"+getISTDateTime();
+document.getElementById("markBtn").style.display="none";
+}
+
+/* ----------- ADMIN PANEL ----------- */
+
+function openAdmin(){
+    document.getElementById("adminPanel").style.display="block";
+}
+
+function loginAdmin(){
+    const pass=document.getElementById("adminPass").value;
+    if(pass!=="786786"){
+        alert("Wrong Password");
+        return;
+    }
+    loadData();
+}
+
+async function loadData(){
+    document.getElementById("adminTable").style.display="block";
+    const snapshot=await db.collection("families").get();
+    let html="";
+    let i=1;
+
+    snapshot.forEach(doc=>{
+        const data=doc.data();
+        let statusIcon=data.status==="COLLECTED"?"✔":"❌";
+
+        html+=`
+        <tr>
+        <td>${i++}</td>
+        <td>${doc.id}</td>
+        <td>${formatDate(data.registered_date)||""}</td>
+        <td>${formatDate(data.collected_date)||""}</td>
+        <td style="font-size:22px">${statusIcon}</td>
+        </tr>
+        `;
+    });
+
+    document.getElementById("tableBody").innerHTML=html;
+}
+
+window.startRegister=startRegister;
+window.startVerify=startVerify;
+window.markCollected=markCollected;
+
+</script>
+
+</body>
+</html>
