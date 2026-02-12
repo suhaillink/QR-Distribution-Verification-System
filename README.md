@@ -4,8 +4,6 @@
 
 ### Prevent duplicate distribution • Verify instantly • Manage beneficiaries in real-time
 
-![Uploading screenshot..png…]()
-
 
 ![GitHub stars](https://img.shields.io/github/stars/YOUR_USERNAME/YOUR_REPO?style=for-the-badge)
 ![GitHub forks](https://img.shields.io/github/forks/YOUR_USERNAME/YOUR_REPO?style=for-the-badge)
