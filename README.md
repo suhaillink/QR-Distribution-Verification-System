@@ -3,6 +3,7 @@
 # 📱 QR Distribution Verification System
 
 ### Prevent duplicate distribution • Verify instantly • Manage beneficiaries in real-time
+<img width="1536" height="1024" alt="screenshot" src="https://github.com/user-attachments/assets/1bb7c839-3c50-41a2-977d-689101889124" />
 
 
 ![GitHub stars](https://img.shields.io/github/stars/YOUR_USERNAME/YOUR_REPO?style=for-the-badge)
